@@ -1,0 +1,4 @@
+# Normalize text files to LF in the repository.
+* text=auto eol=lf
+
+Cargo.lock text eol=lf
