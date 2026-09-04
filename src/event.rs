@@ -63,6 +63,29 @@ impl HookEvent {
         self.tool_input.get("command").and_then(Value::as_str)
     }
 
+    // The new text a file-mutating tool would write, available in the event even
+    // at PreToolUse (before it hits disk): Write's `content`, Edit's `new_string`,
+    // or MultiEdit's joined `new_string`s. Used to judge an edit's network intent.
+    #[must_use]
+    pub fn written_text(&self) -> Option<String> {
+        if let Some(s) = self.tool_input.get("content").and_then(Value::as_str) {
+            return Some(s.to_owned());
+        }
+        if let Some(s) = self.tool_input.get("new_string").and_then(Value::as_str) {
+            return Some(s.to_owned());
+        }
+        if let Some(edits) = self.tool_input.get("edits").and_then(Value::as_array) {
+            let joined: Vec<&str> = edits
+                .iter()
+                .filter_map(|e| e.get("new_string").and_then(Value::as_str))
+                .collect();
+            if !joined.is_empty() {
+                return Some(joined.join("\n"));
+            }
+        }
+        None
+    }
+
     // A stable key linking a PreToolUse snapshot to its PostToolUse record.
     #[must_use]
     pub fn correlation_key(&self) -> String {

@@ -79,14 +79,18 @@ page (no CDN, no fonts, no network), and the **guardrail** below.
   about riskier-but-legitimate ones (`sudo`, force pushes, writes outside the
   project). Blocked attempts are still recorded, so they're auditable. Scoped
   deletes like `rm -rf node_modules` are left alone.
-- **Configurable.** A project `.agentrec/policy.toml` can add `deny`/`warn`
-  patterns, an `allow` escape hatch (overrides a deny), or set `enforce = false`
-  for warn-only mode:
+- **Host policy.** Using the network intent above, the guardrail can block by
+  host: `deny_hosts` blocks any action (command *or* edit) that reaches a listed
+  domain or its subdomains, and a non-empty `allow_hosts` flips it to default-deny
+  — only the listed hosts are permitted, everything else is blocked.
+- **Configurable.** A project `.agentrec/policy.toml`:
   ```toml
-  enforce = true
-  allow = ["rm -rf /opt/mycache"]
-  deny  = ["terraform destroy"]
-  warn  = ["docker system prune"]
+  enforce = true                     # false = warn-only, never blocks
+  allow  = ["rm -rf /opt/mycache"]   # command substrings that override a deny
+  deny   = ["terraform destroy"]     # extra command substrings that block
+  warn   = ["docker system prune"]   # extra command substrings that warn
+  deny_hosts  = ["evil.example.com"] # block actions reaching these hosts
+  allow_hosts = ["github.com"]       # if set, block every other host
   ```
 - **Claude Code only** for now; the core is agent-agnostic, so other agents come
   later via their hooks.

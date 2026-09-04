@@ -26,6 +26,9 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   extracted from the text — `https://…` URLs in a command, a `git@host:` remote,
   and URLs an edit adds to a file — shown as `→ host`. Intent from the text, not an
   observed connection.
+- **Host policy** in the guardrail: `deny_hosts` blocks any command or edit that
+  reaches a listed domain (or subdomain); a non-empty `allow_hosts` makes it
+  default-deny, blocking every host not on the list.
 - **Guardrail**: in `PreToolUse`, catastrophic actions (a broad `rm -rf`, a
   download piped into a shell, a fork bomb, `mkfs`/`dd` to a device, writes to
   sensitive files) are **blocked** (the hook exits 2 so Claude Code refuses them)

