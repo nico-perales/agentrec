@@ -7,6 +7,7 @@
 
 mod error;
 mod event;
+mod policy;
 mod record;
 mod revert;
 mod store;
@@ -17,7 +18,7 @@ pub mod render;
 
 pub use error::Error;
 pub use event::HookEvent;
-pub use record::handle;
+pub use record::{HookOutcome, handle};
 pub use revert::{RevertKind, RevertOutcome, revert};
 pub use store::{CommandRecord, FileChange, LogEntry, Store};
 pub use timeline::{Integrity, load, verify};

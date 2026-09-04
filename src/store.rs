@@ -55,6 +55,12 @@ pub struct LogEntry {
     pub file: Option<FileChange>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub command: Option<CommandRecord>,
+    /// Non-blocking guardrail concerns about this action.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
+    /// Present when the action was blocked by the guardrail; the reason.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blocked: Option<String>,
     pub prev_hash: String,
     pub hash: String,
 }

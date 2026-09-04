@@ -9,30 +9,48 @@ use std::path::{Path, PathBuf};
 
 use crate::error::Error;
 use crate::event::HookEvent;
+use crate::policy::{self, Config};
 use crate::store::{CommandRecord, FileChange, LogEntry, Store, now_ms};
 
 // Bash output is truncated in the log; the point is triage, not archival.
 const MAX_OUTPUT: usize = 8 * 1024;
 
+/// What the caller (the hook entrypoint) should do after handling an event.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HookOutcome {
+    /// Let the tool call proceed.
+    Proceed,
+    /// Block the tool call; the string is the reason to show the agent.
+    Blocked(String),
+}
+
 /// Handles one hook event. A missing `cwd` (no project to anchor to) is a no-op.
-pub fn handle(event: &HookEvent) -> Result<(), Error> {
+pub fn handle(event: &HookEvent) -> Result<HookOutcome, Error> {
     if event.cwd.is_empty() {
-        return Ok(());
+        return Ok(HookOutcome::Proceed);
     }
     let store = Store::for_cwd(&event.cwd)?;
+    let config = Config::load(&event.cwd);
 
     if event.is_pre() {
+        // Guardrail: block a denied action and record the blocked attempt.
+        if let Some(reason) = policy::assess(event, &config).deny {
+            let (file, command, _) = classify(event, &store);
+            store.append(blocked_entry(event, file, command, reason.clone()))?;
+            return Ok(HookOutcome::Blocked(reason));
+        }
         if event.is_file_tool() {
             if let Some(path) = event.file_path() {
                 let before = snapshot(&store, &event.cwd, path);
                 store.put_pending(&event.correlation_key(), before.as_deref())?;
             }
         }
-        return Ok(());
+        return Ok(HookOutcome::Proceed);
     }
 
     if event.is_post() {
         let (file, command, summary) = classify(event, &store);
+        let warnings = policy::assess(event, &config).warnings;
         store.append(LogEntry {
             seq: 0,
             ts_ms: now_ms(),
@@ -42,11 +60,43 @@ pub fn handle(event: &HookEvent) -> Result<(), Error> {
             summary,
             file,
             command,
+            warnings,
+            blocked: None,
             prev_hash: String::new(),
             hash: String::new(),
         })?;
     }
-    Ok(())
+    Ok(HookOutcome::Proceed)
+}
+
+// A log entry for an action the guardrail refused to let run. It captures what
+// was attempted (command / target) but no "after", since nothing executed.
+fn blocked_entry(
+    event: &HookEvent,
+    file: Option<FileChange>,
+    command: Option<CommandRecord>,
+    reason: String,
+) -> LogEntry {
+    // For a blocked file write there is no snapshot to link.
+    let file = file.map(|f| FileChange {
+        path: f.path,
+        before: None,
+        after: None,
+    });
+    LogEntry {
+        seq: 0,
+        ts_ms: now_ms(),
+        session: event.session_id.clone(),
+        tool: event.tool_name.clone(),
+        cwd: event.cwd.clone(),
+        summary: format!("BLOCKED {} — {reason}", event.tool_name),
+        file,
+        command,
+        warnings: Vec::new(),
+        blocked: Some(reason),
+        prev_hash: String::new(),
+        hash: String::new(),
+    }
 }
 
 fn classify(

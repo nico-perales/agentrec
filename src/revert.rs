@@ -91,6 +91,8 @@ pub fn revert(store: &Store, entry: &LogEntry, dry_run: bool) -> Result<RevertOu
             after: file.before.clone(),
         }),
         command: None,
+        warnings: Vec::new(),
+        blocked: None,
         prev_hash: String::new(),
         hash: String::new(),
     })?;
@@ -134,6 +136,8 @@ mod tests {
                 after,
             }),
             command: None,
+            warnings: Vec::new(),
+            blocked: None,
             prev_hash: String::new(),
             hash: String::new(),
         }

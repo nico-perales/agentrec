@@ -1,9 +1,10 @@
 # agentrec
 
-**A local, offline flight recorder for AI coding agents.** It records every action
-an agent takes — file edits (with before/after content) and shell commands — into
-a tamper-evident, hash-chained log, so you can review exactly what an agent did to
-your machine, prove the record wasn't altered, and (soon) revert it.
+**A local, offline flight recorder and guardrail for AI coding agents.** It records
+every action an agent takes — file edits (with before/after content) and shell
+commands — into a tamper-evident, hash-chained log, so you can review exactly what
+an agent did to your machine, prove the record wasn't altered, and revert it. It
+can also **block** catastrophic actions before they run.
 
 It makes **no network calls, needs no account or API key, and never transmits what
 it records.** Everything stays on your disk. That is the whole point: the cloud
@@ -61,11 +62,25 @@ the hash chain stays unbroken.
 ## Status & scope
 
 Early. Working today: recording (via Claude Code hooks), the tamper-evident log,
-`init`, `log`/`show`/`diff`/`verify`, `revert`, and a self-contained HTML `review`
-page (no CDN, no fonts, no network — it opens locally and sends nothing anywhere).
+`init`, `log`/`show`/`diff`/`verify`, `revert`, a self-contained HTML `review`
+page (no CDN, no fonts, no network), and the **guardrail** below.
 
-- **Records, does not prevent.** Blocking dangerous actions (a guardrail) is
-  planned, not here yet.
+- **Guardrail.** In `PreToolUse`, agentrec assesses each action and **denies**
+  (exit 2, so Claude Code refuses it) a small set of high-confidence catastrophic
+  ones — a broad `rm -rf`, a download piped into a shell, a fork bomb, disk-wiping
+  commands, writes to sensitive files (`~/.ssh`, `/etc`, …) — while **warning**
+  about riskier-but-legitimate ones (`sudo`, force pushes, writes outside the
+  project). Blocked attempts are still recorded, so they're auditable. Scoped
+  deletes like `rm -rf node_modules` are left alone.
+- **Configurable.** A project `.agentrec/policy.toml` can add `deny`/`warn`
+  patterns, an `allow` escape hatch (overrides a deny), or set `enforce = false`
+  for warn-only mode:
+  ```toml
+  enforce = true
+  allow = ["rm -rf /opt/mycache"]
+  deny  = ["terraform destroy"]
+  warn  = ["docker system prune"]
+  ```
 - **Claude Code only** for now; the core is agent-agnostic, so other agents come
   later via their hooks.
 - Network/process capture is planned.

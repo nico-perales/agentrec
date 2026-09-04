@@ -9,7 +9,7 @@ use clap::{Parser, Subcommand};
 use serde_json::{Value, json};
 
 use agentrec::render;
-use agentrec::{HookEvent, Store, handle, load, revert, review_html, verify};
+use agentrec::{HookEvent, HookOutcome, Store, handle, load, revert, review_html, verify};
 
 #[derive(Debug, Parser)]
 #[command(name = "agentrec", version, about, long_about = None)]
@@ -54,10 +54,11 @@ enum Command {
 fn main() -> ExitCode {
     let cli = Cli::parse();
 
-    // A hook must never disrupt the agent: whatever happens, exit 0.
+    // The hook exits 0 for everything except a deliberate guardrail block, which
+    // exits 2 so Claude Code refuses the tool call. An internal error never
+    // disrupts the agent — it is swallowed and treated as "proceed".
     if matches!(cli.command, Command::Hook) {
-        run_hook();
-        return ExitCode::SUCCESS;
+        return run_hook();
     }
 
     match run(&cli.command) {
@@ -69,13 +70,18 @@ fn main() -> ExitCode {
     }
 }
 
-fn run_hook() {
+fn run_hook() -> ExitCode {
     let mut input = String::new();
     if std::io::stdin().read_to_string(&mut input).is_err() {
-        return;
+        return ExitCode::SUCCESS;
     }
-    if let Ok(event) = HookEvent::from_reader(input.as_bytes()) {
-        let _ = handle(&event);
+    match HookEvent::from_reader(input.as_bytes()).map(|e| handle(&e)) {
+        Ok(Ok(HookOutcome::Blocked(reason))) => {
+            // stderr on a PreToolUse hook with exit 2 is shown to the agent.
+            eprintln!("agentrec blocked this action — {reason}");
+            ExitCode::from(2)
+        }
+        _ => ExitCode::SUCCESS,
     }
 }
 
@@ -195,12 +201,9 @@ fn init_hooks(user: bool) -> Result<PathBuf> {
         .expect("root is an object")
         .entry("hooks")
         .or_insert_with(|| json!({}));
-    ensure_hook(
-        hooks,
-        "PreToolUse",
-        Some("Write|Edit|MultiEdit|NotebookEdit"),
-        &command,
-    );
+    // PreToolUse fires for every tool: file tools get a before-snapshot, and Bash
+    // (and any tool) is assessed by the guardrail. PostToolUse records the result.
+    ensure_hook(hooks, "PreToolUse", None, &command);
     ensure_hook(hooks, "PostToolUse", None, &command);
 
     let text = serde_json::to_string_pretty(&root).context("serializing settings.json")?;

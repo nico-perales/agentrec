@@ -12,6 +12,7 @@ use crate::timeline::Integrity;
 
 const RED: Style = Style::new().fg_color(Some(Color::Ansi(AnsiColor::Red)));
 const GREEN: Style = Style::new().fg_color(Some(Color::Ansi(AnsiColor::Green)));
+const YELLOW: Style = Style::new().fg_color(Some(Color::Ansi(AnsiColor::Yellow)));
 const DIM: Style = Style::new().dimmed();
 const BOLD: Style = Style::new().bold();
 
@@ -31,7 +32,13 @@ pub fn log(entries: &[LogEntry], color: bool) -> String {
         );
         let _ = write!(out, "  ");
         paint(&mut out, BOLD, &format!("{:<10}", e.tool), color);
-        let _ = writeln!(out, " {}", detail(e));
+        out.push(' ');
+        if e.blocked.is_some() {
+            paint(&mut out, RED, "[blocked] ", color);
+        } else if !e.warnings.is_empty() {
+            paint(&mut out, YELLOW, "[warn] ", color);
+        }
+        let _ = writeln!(out, "{}", detail(e));
     }
     out
 }
@@ -65,6 +72,16 @@ pub fn show(entry: &LogEntry, color: bool) -> String {
         if let Some(o) = &c.output {
             let _ = writeln!(out, "  output:\n{}", indent(o));
         }
+    }
+    if let Some(reason) = &entry.blocked {
+        out.push_str("  ");
+        paint(&mut out, RED, &format!("blocked: {reason}"), color);
+        out.push('\n');
+    }
+    for w in &entry.warnings {
+        out.push_str("  ");
+        paint(&mut out, YELLOW, &format!("warning: {w}"), color);
+        out.push('\n');
     }
     paint(&mut out, DIM, &format!("  hash: {}", entry.hash), color);
     out.push('\n');

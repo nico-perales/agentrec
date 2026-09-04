@@ -77,6 +77,8 @@ mod tests {
             summary: tool.to_owned(),
             file: None,
             command: None,
+            warnings: Vec::new(),
+            blocked: None,
             prev_hash: String::new(),
             hash: String::new(),
         }

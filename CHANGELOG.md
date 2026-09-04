@@ -22,6 +22,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Revert**: `agentrec revert <n>` restores a file to its content before that
   action, recording the revert as its own re-revertible entry (`--dry-run` to
   preview).
+- **Guardrail**: in `PreToolUse`, catastrophic actions (a broad `rm -rf`, a
+  download piped into a shell, a fork bomb, `mkfs`/`dd` to a device, writes to
+  sensitive files) are **blocked** (the hook exits 2 so Claude Code refuses them)
+  and recorded; riskier-but-legitimate ones (`sudo`, force pushes, writes outside
+  the project) are warned about. A project `.agentrec/policy.toml` adds patterns,
+  an allow-list escape hatch, or a warn-only mode.
 - Project stores are keyed by a normalized hash of the working directory, so the
   agent and the CLI resolve to the same recording regardless of path spelling.
 - Library-first design with an optional `cli` feature.
