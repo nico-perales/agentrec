@@ -29,8 +29,36 @@ $ agentrec diff 1
 
 ## How it works
 
-> For a diagrammed walkthrough — the two capture paths, the guardrail decision,
-> and the hash chain — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'fontFamily':'monospace','primaryColor':'#F3F0E9','primaryBorderColor':'#A75D1E','primaryTextColor':'#1A1B18','lineColor':'#7A7B70','clusterBkg':'#FBFAF6','clusterBorder':'#CFCCC0'}}}%%
+flowchart TB
+  subgraph M["Your machine · no network · no account · no API key · no telemetry"]
+    direction TB
+    CC["Claude Code<br/>(has hooks)"]
+    OTH["Any agent or human<br/>aider · Cursor · Cline · editor · shell"]
+    HOOK["agentrec hook<br/>PreToolUse + PostToolUse"]
+    WATCH["agentrec watch<br/>filesystem events · notify"]
+    POL["policy — guardrail<br/>deny (block) / warn"]
+    REC["record<br/>classify · snapshot before / after<br/>via event + network"]
+    subgraph ST["Store · ~/.agentrec — one dir per project"]
+      BLOB["blobs/ — deduplicated content (sha256)"]
+      LOG["log.jsonl — hash-chained entries"]
+      HEAD["head.json — O(1) appends"]
+    end
+    TOOLS["Read / audit (CLI)<br/>log · show · diff · verify · revert · review"]
+    CC --> HOOK
+    OTH --> WATCH
+    HOOK --> POL
+    POL -->|proceed| REC
+    POL -->|deny · exit 2 · blocks| REC
+    WATCH -->|no guardrail| REC
+    REC --> ST
+    ST --> TOOLS
+  end
+```
+
+*Two capture paths, one local core. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+for the guardrail decision and the tamper-evident hash chain.*
 
 agentrec plugs into **Claude Code's hooks**. `agentrec init` writes a
 `PreToolUse`/`PostToolUse` hook into `.claude/settings.json`; from then on Claude
