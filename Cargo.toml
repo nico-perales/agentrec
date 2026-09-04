@@ -14,7 +14,9 @@ exclude = ["/.github"]
 
 [features]
 default = ["cli"]
-cli = ["dep:clap", "dep:anyhow"]
+cli = ["watch", "dep:clap", "dep:anyhow"]
+# Filesystem watching (`agentrec watch`); pulls in the OS notify backend.
+watch = ["dep:notify"]
 
 [dependencies]
 serde = { version = "1.0.229", features = ["derive"] }
@@ -27,6 +29,7 @@ toml = "0.9"
 
 clap = { version = "4.6.5", features = ["derive"], optional = true }
 anyhow = { version = "1.0.104", optional = true }
+notify = { version = "8", optional = true }
 
 [[bin]]
 name = "agentrec"

@@ -24,6 +24,9 @@ pub enum Error {
 
     #[error("entry #{0} is not a revertible file change")]
     NotRevertible(u64),
+
+    #[error("filesystem watch error: {0}")]
+    Watch(String),
 }
 
 impl Error {

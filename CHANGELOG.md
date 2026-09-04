@@ -13,6 +13,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Recording via Claude Code hooks**: `agentrec init` installs `PreToolUse` /
   `PostToolUse` hooks; each tool call is captured — file edits (before/after
   content snapshotted into a content-addressed blob store) and shell commands.
+- **Recording any agent via `agentrec watch`**: a filesystem watcher that records
+  every create/modify/delete under a directory — with before/after content and
+  network intent — into the same tamper-evident log, no matter which tool (or
+  human) made the change. Agent-agnostic, since every agent writes files to disk.
+  Observe-only: it records but does not block, and does not capture shell commands.
+  Behind an optional `watch` feature (enabled by `cli`).
 - **Tamper-evident log**: an append-only, hash-chained log where each entry's hash
   binds the previous, so any modification or reordering of a past entry is
   detectable with `agentrec verify`.

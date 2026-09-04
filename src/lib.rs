@@ -13,6 +13,8 @@ mod record;
 mod revert;
 mod store;
 mod timeline;
+#[cfg(feature = "watch")]
+mod watch;
 mod web;
 
 pub mod render;
@@ -23,4 +25,6 @@ pub use record::{HookOutcome, handle};
 pub use revert::{RevertKind, RevertOutcome, revert};
 pub use store::{CommandRecord, FileChange, LogEntry, Store};
 pub use timeline::{Integrity, load, verify};
+#[cfg(feature = "watch")]
+pub use watch::watch;
 pub use web::review_html;

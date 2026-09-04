@@ -43,10 +43,32 @@ Code pipes each tool call to `agentrec hook`, which:
 The store lives under `~/.agentrec/` (override with `$AGENTREC_HOME`), keyed by a
 normalized hash of the project directory.
 
+## Recording any agent, without hooks
+
+Hooks give the fullest record — edits *and* commands, plus the guardrail — but
+they only exist for Claude Code. Every other agent (aider, Cursor, Cline, …) and
+every human still writes files to disk, so agentrec can record those edits by
+watching the filesystem directly:
+
+```bash
+agentrec watch    # run in your project; records every file change, Ctrl+C to stop
+```
+
+`watch` snapshots the project up front, then records each create/modify/delete —
+with before/after content and network intent — into the **same** tamper-evident
+log, whoever made the change. So `log`, `diff`, `verify`, `revert`, and `review`
+work on watched changes exactly as they do on hook-captured ones.
+
+It is deliberately **observe-only**: it sees a change *after* it lands on disk, so
+it records but cannot block (blocking needs the Claude Code `PreToolUse` hook), and
+it does not capture shell commands (the filesystem doesn't carry them). What it
+gives you is a faithful record of *what changed in your files*, agent-agnostic.
+
 ## Usage
 
 ```bash
 agentrec init            # install the hooks into this project's .claude/settings.json
+agentrec watch           # record file changes by any tool, hooks or not (Ctrl+C to stop)
 agentrec log             # list recorded actions
 agentrec show <n>        # one action in detail
 agentrec diff <n>        # before/after diff of a file change
@@ -92,8 +114,11 @@ page (no CDN, no fonts, no network), and the **guardrail** below.
   deny_hosts  = ["evil.example.com"] # block actions reaching these hosts
   allow_hosts = ["github.com"]       # if set, block every other host
   ```
-- **Claude Code only** for now; the core is agent-agnostic, so other agents come
-  later via their hooks.
+- **Any agent, via `watch`.** Full recording (edits *and* commands) and the
+  guardrail run on Claude Code hooks; `agentrec watch` records *file edits* by any
+  tool or human, hooks or not, by watching the filesystem — observe-only, and no
+  commands. Command recording for other agents (a wrapper they run through) is
+  future work.
 - Network/process capture is planned.
 - A hash chain detects tampering with any entry that has something after it;
   closing the tail-deletion gap (anchoring/signing) is future work.

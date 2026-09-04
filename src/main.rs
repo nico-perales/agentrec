@@ -49,6 +49,11 @@ enum Command {
         #[arg(long)]
         open: bool,
     },
+    /// Record every file change under a directory made by any tool (no hooks).
+    Watch {
+        /// Directory to watch (defaults to the current directory).
+        path: Option<PathBuf>,
+    },
 }
 
 fn main() -> ExitCode {
@@ -136,6 +141,17 @@ fn run(command: &Command) -> Result<()> {
             if *open {
                 open_in_browser(&path);
             }
+            Ok(())
+        }
+        Command::Watch { path } => {
+            let root = match path {
+                Some(p) => p.clone(),
+                None => std::env::current_dir().context("resolving the current directory")?,
+            };
+            if !root.is_dir() {
+                anyhow::bail!("not a directory: {}", root.display());
+            }
+            agentrec::watch(&root).context("watching the directory")?;
             Ok(())
         }
     }
