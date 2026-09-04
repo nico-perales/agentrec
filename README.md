@@ -29,6 +29,9 @@ $ agentrec diff 1
 
 ## How it works
 
+> For a diagrammed walkthrough — the two capture paths, the guardrail decision,
+> and the hash chain — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 agentrec plugs into **Claude Code's hooks**. `agentrec init` writes a
 `PreToolUse`/`PostToolUse` hook into `.claude/settings.json`; from then on Claude
 Code pipes each tool call to `agentrec hook`, which:
