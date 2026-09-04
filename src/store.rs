@@ -58,6 +58,9 @@ pub struct LogEntry {
     /// Non-blocking guardrail concerns about this action.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub warnings: Vec<String>,
+    /// Hosts this action reaches out to, inferred from its text.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub network: Vec<String>,
     /// Present when the action was blocked by the guardrail; the reason.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blocked: Option<String>,

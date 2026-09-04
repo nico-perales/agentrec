@@ -65,6 +65,13 @@ Early. Working today: recording (via Claude Code hooks), the tamper-evident log,
 `init`, `log`/`show`/`diff`/`verify`, `revert`, a self-contained HTML `review`
 page (no CDN, no fonts, no network), and the **guardrail** below.
 
+- **Network intent.** Each entry records the hosts its action reaches out to,
+  read from the text — the `https://…` URLs a command hits, the `git@host:` remote
+  it pushes to, and any URL an *edit* adds to a file — shown as `→ host` in the log
+  and review. This is intent from the text, **not** an observed connection: a
+  compiled binary or an obfuscated script could reach somewhere the text never
+  names. (True packet capture would need a kernel/proxy layer that breaks the
+  observe-via-hooks, no-privilege model — deliberately out of scope.)
 - **Guardrail.** In `PreToolUse`, agentrec assesses each action and **denies**
   (exit 2, so Claude Code refuses it) a small set of high-confidence catastrophic
   ones — a broad `rm -rf`, a download piped into a shell, a fork bomb, disk-wiping

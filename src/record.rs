@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 use crate::error::Error;
 use crate::event::HookEvent;
+use crate::network;
 use crate::policy::{self, Config};
 use crate::store::{CommandRecord, FileChange, LogEntry, Store, now_ms};
 
@@ -51,6 +52,7 @@ pub fn handle(event: &HookEvent) -> Result<HookOutcome, Error> {
     if event.is_post() {
         let (file, command, summary) = classify(event, &store);
         let warnings = policy::assess(event, &config).warnings;
+        let network = hosts(&store, file.as_ref(), command.as_ref());
         store.append(LogEntry {
             seq: 0,
             ts_ms: now_ms(),
@@ -61,12 +63,27 @@ pub fn handle(event: &HookEvent) -> Result<HookOutcome, Error> {
             file,
             command,
             warnings,
+            network,
             blocked: None,
             prev_hash: String::new(),
             hash: String::new(),
         })?;
     }
     Ok(HookOutcome::Proceed)
+}
+
+// Hosts an action reaches out to: from a command's text, or from the content a
+// file edit produced.
+fn hosts(store: &Store, file: Option<&FileChange>, command: Option<&CommandRecord>) -> Vec<String> {
+    if let Some(c) = command {
+        return network::extract_hosts(&c.command);
+    }
+    if let Some(hash) = file.and_then(|f| f.after.as_ref()) {
+        if let Ok(bytes) = store.get_blob(hash) {
+            return network::extract_hosts(&String::from_utf8_lossy(&bytes));
+        }
+    }
+    Vec::new()
 }
 
 // A log entry for an action the guardrail refused to let run. It captures what
@@ -83,6 +100,10 @@ fn blocked_entry(
         before: None,
         after: None,
     });
+    let network = command
+        .as_ref()
+        .map(|c| network::extract_hosts(&c.command))
+        .unwrap_or_default();
     LogEntry {
         seq: 0,
         ts_ms: now_ms(),
@@ -93,6 +114,7 @@ fn blocked_entry(
         file,
         command,
         warnings: Vec::new(),
+        network,
         blocked: Some(reason),
         prev_hash: String::new(),
         hash: String::new(),

@@ -73,6 +73,9 @@ pub fn show(entry: &LogEntry, color: bool) -> String {
             let _ = writeln!(out, "  output:\n{}", indent(o));
         }
     }
+    if !entry.network.is_empty() {
+        let _ = writeln!(out, "  network: {}", entry.network.join(", "));
+    }
     if let Some(reason) = &entry.blocked {
         out.push_str("  ");
         paint(&mut out, RED, &format!("blocked: {reason}"), color);
@@ -172,7 +175,7 @@ pub fn revert(outcome: &RevertOutcome, color: bool) -> String {
 }
 
 fn detail(e: &LogEntry) -> String {
-    if let Some(f) = &e.file {
+    let base = if let Some(f) = &e.file {
         let state = match (&f.before, &f.after) {
             (None, Some(_)) => "+",
             (Some(_), None) => "-",
@@ -183,6 +186,11 @@ fn detail(e: &LogEntry) -> String {
         c.command.lines().next().unwrap_or("").to_owned()
     } else {
         e.summary.clone()
+    };
+    if e.network.is_empty() {
+        base
+    } else {
+        format!("{base}  → {}", e.network.join(", "))
     }
 }
 

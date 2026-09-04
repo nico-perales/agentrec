@@ -7,6 +7,7 @@
 
 mod error;
 mod event;
+mod network;
 mod policy;
 mod record;
 mod revert;

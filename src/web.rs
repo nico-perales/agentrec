@@ -80,6 +80,13 @@ fn card(out: &mut String, store: &Store, entry: &LogEntry) -> Result<(), Error> 
             let _ = write!(out, "<pre class=\"output\">{}</pre>", esc(output));
         }
     }
+    if !entry.network.is_empty() {
+        let _ = write!(
+            out,
+            "<div class=\"net\">\u{2192} {}</div>",
+            esc(&entry.network.join(", "))
+        );
+    }
 
     out.push_str("</div>");
     Ok(())
@@ -189,6 +196,7 @@ pre {{ margin:10px 0 0; padding:10px; border-radius:6px; overflow-x:auto;
 .exit-ok {{ color:var(--ok); font-size:12px; margin-top:6px; }}
 .exit-bad {{ color:var(--bad); font-size:12px; margin-top:6px; }}
 .output {{ color:var(--muted); }}
+.net {{ margin-top:8px; color:var(--accent); font-size:12.5px; word-break:break-all; }}
 .empty {{ color:var(--muted); }}
 .foot {{ margin-top:28px; color:var(--muted); font-size:12px; }}
 body.hide-file .card.file {{ display:none; }}

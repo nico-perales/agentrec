@@ -22,6 +22,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Revert**: `agentrec revert <n>` restores a file to its content before that
   action, recording the revert as its own re-revertible entry (`--dry-run` to
   preview).
+- **Network intent**: each entry records the hosts its action reaches out to,
+  extracted from the text — `https://…` URLs in a command, a `git@host:` remote,
+  and URLs an edit adds to a file — shown as `→ host`. Intent from the text, not an
+  observed connection.
 - **Guardrail**: in `PreToolUse`, catastrophic actions (a broad `rm -rf`, a
   download piped into a shell, a fork bomb, `mkfs`/`dd` to a device, writes to
   sensitive files) are **blocked** (the hook exits 2 so Claude Code refuses them)

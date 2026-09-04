@@ -78,6 +78,7 @@ mod tests {
             file: None,
             command: None,
             warnings: Vec::new(),
+            network: Vec::new(),
             blocked: None,
             prev_hash: String::new(),
             hash: String::new(),
